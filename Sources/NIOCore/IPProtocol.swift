@@ -36,215 +36,89 @@ extension NIOIPProtocol {
 // Subset of https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml with an RFC
 extension NIOIPProtocol {
     /// IPv6 Hop-by-Hop Option - [RFC8200]
-    @inlinable
-    public static var hopopt: NIOIPProtocol {
-        Self(rawValue: 0)
-    }
+    public static let hopopt = Self(rawValue: 0)
     /// Internet Control Message - [RFC792]
-    @inlinable
-    public static var icmp: NIOIPProtocol {
-        Self(rawValue: 1)
-    }
+    public static let icmp = Self(rawValue: 1)
     /// Internet Group Management - [RFC1112]
-    @inlinable
-    public static var igmp: NIOIPProtocol {
-        Self(rawValue: 2)
-    }
+    public static let igmp = Self(rawValue: 2)
     /// Gateway-to-Gateway - [RFC823]
-    @inlinable
-    public static var ggp: NIOIPProtocol {
-        Self(rawValue: 3)
-    }
+    public static let ggp = Self(rawValue: 3)
     /// IPv4 encapsulation - [RFC2003]
-    @inlinable
-    public static var ipv4: NIOIPProtocol {
-        Self(rawValue: 4)
-    }
+    public static let ipv4 = Self(rawValue: 4)
     /// Stream - [RFC1190][RFC1819]
-    @inlinable
-    public static var st: NIOIPProtocol {
-        Self(rawValue: 5)
-    }
+    public static let st = Self(rawValue: 5)
     /// Transmission Control - [RFC9293]
-    @inlinable
-    public static var tcp: NIOIPProtocol {
-        Self(rawValue: 6)
-    }
+    public static let tcp = Self(rawValue: 6)
     /// Exterior Gateway Protocol - [RFC888][David_Mills]
-    @inlinable
-    public static var egp: NIOIPProtocol {
-        Self(rawValue: 8)
-    }
+    public static let egp = Self(rawValue: 8)
     /// Network Voice Protocol - [RFC741][Steve_Casner]
-    @inlinable
-    public static var nvpIi: NIOIPProtocol {
-        Self(rawValue: 11)
-    }
+    public static let nvpIi = Self(rawValue: 11)
     /// User Datagram - [RFC768][Jon_Postel]
-    @inlinable
-    public static var udp: NIOIPProtocol {
-        Self(rawValue: 17)
-    }
+    public static let udp = Self(rawValue: 17)
     /// Host Monitoring - [RFC869][Bob_Hinden]
-    @inlinable
-    public static var hmp: NIOIPProtocol {
-        Self(rawValue: 20)
-    }
+    public static let hmp = Self(rawValue: 20)
     /// Reliable Data Protocol - [RFC908][Bob_Hinden]
-    @inlinable
-    public static var rdp: NIOIPProtocol {
-        Self(rawValue: 27)
-    }
+    public static let rdp = Self(rawValue: 27)
     /// Internet Reliable Transaction - [RFC938][Trudy_Miller]
-    @inlinable
-    public static var irtp: NIOIPProtocol {
-        Self(rawValue: 28)
-    }
+    public static let irtp = Self(rawValue: 28)
     /// ISO Transport Protocol Class 4 - [RFC905][<mystery contact>]
-    @inlinable
-    public static var isoTp4: NIOIPProtocol {
-        Self(rawValue: 29)
-    }
+    public static let isoTp4 = Self(rawValue: 29)
     /// Bulk Data Transfer Protocol - [RFC969][David_Clark]
-    @inlinable
-    public static var netblt: NIOIPProtocol {
-        Self(rawValue: 30)
-    }
+    public static let netblt = Self(rawValue: 30)
     /// Datagram Congestion Control Protocol - [RFC4340]
-    @inlinable
-    public static var dccp: NIOIPProtocol {
-        Self(rawValue: 33)
-    }
+    public static let dccp = Self(rawValue: 33)
     /// IPv6 encapsulation - [RFC2473]
-    @inlinable
-    public static var ipv6: NIOIPProtocol {
-        Self(rawValue: 41)
-    }
+    public static let ipv6 = Self(rawValue: 41)
     /// Reservation Protocol - [RFC2205][RFC3209][Bob_Braden]
-    @inlinable
-    public static var rsvp: NIOIPProtocol {
-        Self(rawValue: 46)
-    }
+    public static let rsvp = Self(rawValue: 46)
     /// Generic Routing Encapsulation - [RFC2784][Tony_Li]
-    @inlinable
-    public static var gre: NIOIPProtocol {
-        Self(rawValue: 47)
-    }
+    public static let gre = Self(rawValue: 47)
     /// Dynamic Source Routing Protocol - [RFC4728]
-    @inlinable
-    public static var dsr: NIOIPProtocol {
-        Self(rawValue: 48)
-    }
+    public static let dsr = Self(rawValue: 48)
     /// Encap Security Payload - [RFC4303]
-    @inlinable
-    public static var esp: NIOIPProtocol {
-        Self(rawValue: 50)
-    }
+    public static let esp = Self(rawValue: 50)
     /// Authentication Header - [RFC4302]
-    @inlinable
-    public static var ah: NIOIPProtocol {
-        Self(rawValue: 51)
-    }
+    public static let ah = Self(rawValue: 51)
     /// NBMA Address Resolution Protocol - [RFC1735]
-    @inlinable
-    public static var narp: NIOIPProtocol {
-        Self(rawValue: 54)
-    }
+    public static let narp = Self(rawValue: 54)
     /// ICMP for IPv6 - [RFC8200]
-    @inlinable
-    public static var ipv6Icmp: NIOIPProtocol {
-        Self(rawValue: 58)
-    }
+    public static let ipv6Icmp = Self(rawValue: 58)
     /// No Next Header for IPv6 - [RFC8200]
-    @inlinable
-    public static var ipv6Nonxt: NIOIPProtocol {
-        Self(rawValue: 59)
-    }
+    public static let ipv6Nonxt = Self(rawValue: 59)
     /// Destination Options for IPv6 - [RFC8200]
-    @inlinable
-    public static var ipv6Opts: NIOIPProtocol {
-        Self(rawValue: 60)
-    }
+    public static let ipv6Opts = Self(rawValue: 60)
     /// EIGRP - [RFC7868]
-    @inlinable
-    public static var eigrp: NIOIPProtocol {
-        Self(rawValue: 88)
-    }
+    public static let eigrp = Self(rawValue: 88)
     /// OSPFIGP - [RFC1583][RFC2328][RFC5340][John_Moy]
-    @inlinable
-    public static var ospfigp: NIOIPProtocol {
-        Self(rawValue: 89)
-    }
+    public static let ospfigp = Self(rawValue: 89)
     /// Ethernet-within-IP Encapsulation - [RFC3378]
-    @inlinable
-    public static var etherip: NIOIPProtocol {
-        Self(rawValue: 97)
-    }
+    public static let etherip = Self(rawValue: 97)
     /// Encapsulation Header - [RFC1241][Robert_Woodburn]
-    @inlinable
-    public static var encap: NIOIPProtocol {
-        Self(rawValue: 98)
-    }
+    public static let encap = Self(rawValue: 98)
     /// Protocol Independent Multicast - [RFC7761][Dino_Farinacci]
-    @inlinable
-    public static var pim: NIOIPProtocol {
-        Self(rawValue: 103)
-    }
+    public static let pim = Self(rawValue: 103)
     /// IP Payload Compression Protocol - [RFC2393]
-    @inlinable
-    public static var ipcomp: NIOIPProtocol {
-        Self(rawValue: 108)
-    }
+    public static let ipcomp = Self(rawValue: 108)
     /// Virtual Router Redundancy Protocol - [RFC5798]
-    @inlinable
-    public static var vrrp: NIOIPProtocol {
-        Self(rawValue: 112)
-    }
+    public static let vrrp = Self(rawValue: 112)
     /// Layer Two Tunneling Protocol - [RFC3931][Bernard_Aboba]
-    @inlinable
-    public static var l2tp: NIOIPProtocol {
-        Self(rawValue: 115)
-    }
+    public static let l2tp = Self(rawValue: 115)
     /// Fibre Channel - [Murali_Rajagopal][RFC6172]
-    @inlinable
-    public static var fc: NIOIPProtocol {
-        Self(rawValue: 133)
-    }
+    public static let fc = Self(rawValue: 133)
     /// MANET Protocols - [RFC5498]
-    @inlinable
-    public static var manet: NIOIPProtocol {
-        Self(rawValue: 138)
-    }
+    public static let manet = Self(rawValue: 138)
     /// Host Identity Protocol - [RFC7401]
-    @inlinable
-    public static var hip: NIOIPProtocol {
-        Self(rawValue: 139)
-    }
+    public static let hip = Self(rawValue: 139)
     /// Shim6 Protocol - [RFC5533]
-    @inlinable
-    public static var shim6: NIOIPProtocol {
-        Self(rawValue: 140)
-    }
+    public static let shim6 = Self(rawValue: 140)
     /// Wrapped Encapsulating Security Payload - [RFC5840]
-    @inlinable
-    public static var wesp: NIOIPProtocol {
-        Self(rawValue: 141)
-    }
+    public static let wesp = Self(rawValue: 141)
     /// Robust Header Compression - [RFC5858]
-    @inlinable
-    public static var rohc: NIOIPProtocol {
-        Self(rawValue: 142)
-    }
+    public static let rohc = Self(rawValue: 142)
     /// Ethernet - [RFC8986]
-    @inlinable
-    public static var ethernet: NIOIPProtocol {
-        Self(rawValue: 143)
-    }
+    public static let ethernet = Self(rawValue: 143)
     /// AGGFRAG encapsulation payload for ESP - [RFC-ietf-ipsecme-iptfs-19]
-    @inlinable
-    public static var aggfrag: NIOIPProtocol {
-        Self(rawValue: 144)
-    }
+    public static let aggfrag = Self(rawValue: 144)
 }
 
 extension NIOIPProtocol: CustomStringConvertible {

@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIOConcurrencyHelpers
 import NIOCore
 import NIOEmbedded
 import NIOPosix
@@ -53,14 +52,10 @@ class UniversalBootstrapSupportTest: XCTestCase {
             }
         }
 
-        final class FishOutChannelHandler: ChannelInboundHandler, Sendable {
+        final class FishOutChannelHandler: ChannelInboundHandler {
             typealias InboundIn = Channel
 
-            private let _acceptedChannels = NIOLockedValueBox<[Channel]>([])
-
-            var acceptedChannels: [Channel] {
-                self._acceptedChannels.withLockedValue { $0 }
-            }
+            var acceptedChannels: [Channel] = []
 
             let firstArrived: EventLoopPromise<Void>
 
@@ -70,11 +65,8 @@ class UniversalBootstrapSupportTest: XCTestCase {
 
             func channelRead(context: ChannelHandlerContext, data: NIOAny) {
                 let channel = Self.unwrapInboundIn(data)
-                let count = self._acceptedChannels.withLockedValue { channels in
-                    channels.append(channel)
-                    return channels.count
-                }
-                if count == 1 {
+                self.acceptedChannels.append(channel)
+                if self.acceptedChannels.count == 1 {
                     self.firstArrived.succeed(())
                 }
                 context.fireChannelRead(data)
@@ -141,7 +133,7 @@ class UniversalBootstrapSupportTest: XCTestCase {
 
                 // let's check that the order is right
                 XCTAssertNoThrow(
-                    try client.eventLoop.submit { [buffer] in
+                    try client.eventLoop.submit {
                         client.pipeline.fireChannelRead(buffer)
                         client.pipeline.fireUserInboundEventTriggered(buffer)
                     }.wait()

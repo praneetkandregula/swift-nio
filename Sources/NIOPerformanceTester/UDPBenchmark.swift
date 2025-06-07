@@ -127,7 +127,7 @@ extension UDPBenchmark {
                     /// Number of requests still to send.
                     var requestsToSend: Int
                     /// Number of responses still being waited for.
-                    var responsesToReceive: Int
+                    var responsesToRecieve: Int
                     /// Number of writes before the next flush, i.e. flush on zero.
                     var writesBeforeNextFlush: Int
                     /// Number of writes before each flush.
@@ -137,7 +137,7 @@ extension UDPBenchmark {
 
                     init(requests: Int, writesPerFlush: Int, promise: EventLoopPromise<Void>) {
                         self.requestsToSend = requests
-                        self.responsesToReceive = requests
+                        self.responsesToRecieve = requests
                         self.writesBeforeNextFlush = writesPerFlush
                         self.writesPerFlush = writesPerFlush
                         self.promise = promise
@@ -169,8 +169,8 @@ extension UDPBenchmark {
             mutating func receive() -> Receive {
                 switch self.state {
                 case .running(var running):
-                    running.responsesToReceive &-= 1
-                    if running.responsesToReceive == 0, running.requestsToSend == 0 {
+                    running.responsesToRecieve &-= 1
+                    if running.responsesToRecieve == 0, running.requestsToSend == 0 {
                         self.state = .stopped
                         return .finished(running.promise)
                     } else {

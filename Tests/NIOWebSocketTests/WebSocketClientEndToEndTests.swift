@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIOConcurrencyHelpers
 import NIOEmbedded
 import NIOHTTP1
 import XCTest
@@ -55,9 +54,9 @@ extension ChannelPipeline {
 }
 
 private func setUpClientChannel(
-    clientHTTPHandler: RemovableChannelHandler & Sendable,
-    clientUpgraders: [NIOHTTPClientProtocolUpgrader & Sendable],
-    _ upgradeCompletionHandler: @escaping @Sendable (ChannelHandlerContext) -> Void
+    clientHTTPHandler: RemovableChannelHandler,
+    clientUpgraders: [NIOHTTPClientProtocolUpgrader],
+    _ upgradeCompletionHandler: @escaping (ChannelHandlerContext) -> Void
 ) throws -> EmbeddedChannel {
 
     let channel = EmbeddedChannel()
@@ -65,7 +64,7 @@ private func setUpClientChannel(
     let config: NIOHTTPClientUpgradeSendableConfiguration = (
         upgraders: clientUpgraders,
         completionHandler: { context in
-            channel.pipeline.syncOperations.removeHandler(clientHTTPHandler, promise: nil)
+            channel.pipeline.removeHandler(clientHTTPHandler, promise: nil)
             upgradeCompletionHandler(context)
         }
     )
@@ -81,7 +80,7 @@ private func setUpClientChannel(
 }
 
 // A HTTP handler that will send an initial request which can be augmented by the upgrade handler.
-private final class BasicHTTPHandler: ChannelInboundHandler, RemovableChannelHandler, Sendable {
+private final class BasicHTTPHandler: ChannelInboundHandler, RemovableChannelHandler {
     fileprivate typealias InboundIn = HTTPClientResponsePart
     fileprivate typealias OutboundOut = HTTPClientRequestPart
 
@@ -93,7 +92,7 @@ private final class BasicHTTPHandler: ChannelInboundHandler, RemovableChannelHan
 
 // A HTTP handler that will send a request and then fail if it receives a response or an error.
 // It can be used when there is a successful upgrade as the handler should be removed by the upgrader.
-private final class ExplodingHTTPHandler: ChannelInboundHandler, RemovableChannelHandler, Sendable {
+private final class ExplodingHTTPHandler: ChannelInboundHandler, RemovableChannelHandler {
     fileprivate typealias InboundIn = HTTPClientResponsePart
     fileprivate typealias OutboundOut = HTTPClientRequestPart
 
@@ -164,7 +163,7 @@ private func basicRequest(path: String = "/") -> String {
 class WebSocketClientEndToEndTests: XCTestCase {
     func testSimpleUpgradeSucceeds() throws {
 
-        let upgradeHandlerCallbackFired = NIOLockedValueBox(false)
+        var upgradeHandlerCallbackFired = false
         let requestKey = "OfS0wDaT5NoxF2gqm7Zj2YtetzM="
         let responseKey = "yKEqitDFPE81FyIhKTm+ojBqigk="
 
@@ -184,7 +183,7 @@ class WebSocketClientEndToEndTests: XCTestCase {
         ) { _ in
 
             // This is called before the upgrader gets called.
-            upgradeHandlerCallbackFired.withLockedValue { $0 = true }
+            upgradeHandlerCallbackFired = true
         }
 
         // Read the server request.
@@ -234,7 +233,7 @@ class WebSocketClientEndToEndTests: XCTestCase {
                 .assertContains(handlerType: WebSocketRecorderHandler.self)
         )
 
-        XCTAssert(upgradeHandlerCallbackFired.withLockedValue { $0 })
+        XCTAssert(upgradeHandlerCallbackFired)
 
         // Close the pipeline.
         XCTAssertNoThrow(try clientChannel.close().wait())
@@ -498,6 +497,7 @@ class WebSocketClientEndToEndTests: XCTestCase {
     }
 }
 
+#if !canImport(Darwin) || swift(>=5.10)
 @available(macOS 13, iOS 16, tvOS 16, watchOS 9, *)
 final class TypedWebSocketClientEndToEndTests: WebSocketClientEndToEndTests {
     func setUpClientChannel(
@@ -750,3 +750,4 @@ final class TypedWebSocketClientEndToEndTests: WebSocketClientEndToEndTests {
         return (clientChannel, handler)
     }
 }
+#endif

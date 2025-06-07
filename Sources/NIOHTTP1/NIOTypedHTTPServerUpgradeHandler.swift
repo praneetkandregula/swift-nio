@@ -11,6 +11,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
+#if !canImport(Darwin) || swift(>=5.10)
 import NIOCore
 
 /// An object that implements `NIOTypedHTTPServerProtocolUpgrader` knows how to handle HTTP upgrade to
@@ -454,3 +455,5 @@ public final class NIOTypedHTTPServerUpgradeHandler<UpgradeResult: Sendable>: Ch
 
 @available(*, unavailable)
 extension NIOTypedHTTPServerUpgradeHandler: Sendable {}
+
+#endif

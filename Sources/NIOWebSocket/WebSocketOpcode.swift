@@ -16,45 +16,20 @@ import NIOCore
 
 /// An operation code for a websocket frame.
 public struct WebSocketOpcode: Sendable {
-    @usableFromInline
-    let networkRepresentation: UInt8
+    fileprivate let networkRepresentation: UInt8
 
-    @inlinable
-    public static var continuation: WebSocketOpcode {
-        WebSocketOpcode(rawValue: 0x0)
-    }
-
-    @inlinable
-    public static var text: WebSocketOpcode {
-        WebSocketOpcode(rawValue: 0x1)
-    }
-
-    @inlinable
-    public static var binary: WebSocketOpcode {
-        WebSocketOpcode(rawValue: 0x2)
-    }
-
-    @inlinable
-    public static var connectionClose: WebSocketOpcode {
-        WebSocketOpcode(rawValue: 0x8)
-    }
-
-    @inlinable
-    public static var ping: WebSocketOpcode {
-        WebSocketOpcode(rawValue: 0x9)
-    }
-
-    @inlinable
-    public static var pong: WebSocketOpcode {
-        WebSocketOpcode(rawValue: 0xA)
-    }
+    public static let continuation = WebSocketOpcode(rawValue: 0x0)
+    public static let text = WebSocketOpcode(rawValue: 0x1)
+    public static let binary = WebSocketOpcode(rawValue: 0x2)
+    public static let connectionClose = WebSocketOpcode(rawValue: 0x8)
+    public static let ping = WebSocketOpcode(rawValue: 0x9)
+    public static let pong = WebSocketOpcode(rawValue: 0xA)
 
     /// Create an opcode from the encoded representation.
     ///
     /// - Parameters
     ///   - encoded: The encoded representation of the opcode as an 8-bit integer.
     ///          Must be no more than 4 bits large.
-    @inlinable
     public init?(encodedWebSocketOpcode encoded: UInt8) {
         guard encoded < 0x10 else {
             return nil
@@ -65,15 +40,13 @@ public struct WebSocketOpcode: Sendable {
 
     /// Create an opcode directly with no validation.
     ///
-    /// Used only to create the static vars on this structure.
-    @inlinable
-    init(rawValue: UInt8) {
+    /// Used only to create the static lets on this structure.
+    private init(rawValue: UInt8) {
         self.networkRepresentation = rawValue
     }
 
     /// Whether the opcode is in the control range: that is, if the
     /// high bit of the opcode nibble is `1`.
-    @inlinable
     public var isControlOpcode: Bool {
         self.networkRepresentation & 0x8 == 0x8
     }
@@ -84,7 +57,6 @@ extension WebSocketOpcode: Equatable {}
 extension WebSocketOpcode: Hashable {}
 
 extension WebSocketOpcode: CaseIterable {
-    @inlinable
     public static var allCases: [WebSocketOpcode] {
         get { (0..<0x10).map { WebSocketOpcode(rawValue: $0) } }
 
@@ -124,7 +96,6 @@ extension UInt8 {
     ///
     /// - Parameters:
     ///   - opcode: The `WebSocketOpcode`.
-    @inlinable
     public init(webSocketOpcode opcode: WebSocketOpcode) {
         precondition(opcode.networkRepresentation < 0x10)
         self = opcode.networkRepresentation
@@ -136,7 +107,6 @@ extension Int {
     ///
     /// - Parameters:
     ///   - opcode: The `WebSocketOpcode`.
-    @inlinable
     public init(webSocketOpcode opcode: WebSocketOpcode) {
         precondition(opcode.networkRepresentation < 0x10)
         self = Int(opcode.networkRepresentation)

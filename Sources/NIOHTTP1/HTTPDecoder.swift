@@ -797,31 +797,21 @@ public enum RemoveAfterUpgradeStrategy: Sendable {
 
 /// Strategy to use when a HTTPDecoder receives an informational HTTP response (1xx except 101)
 public struct NIOInformationalResponseStrategy: Hashable, Sendable {
-    @usableFromInline
-    enum Base: Sendable {
+    enum Base {
         case drop
         case forward
     }
 
-    @usableFromInline
     var base: Base
-
-    @inlinable
-    init(_ base: Base) {
+    private init(_ base: Base) {
         self.base = base
     }
 
     /// Drop the informational response and only forward the "real" response
-    @inlinable
-    public static var drop: NIOInformationalResponseStrategy {
-        Self(.drop)
-    }
+    public static let drop = Self(.drop)
     /// Forward the informational response and then forward the "real" response. This will result in
     /// multiple `head` before an `end` is emitted.
-    @inlinable
-    public static var forward: NIOInformationalResponseStrategy {
-        Self(.forward)
-    }
+    public static let forward = Self(.forward)
 }
 
 extension HTTPParserError {

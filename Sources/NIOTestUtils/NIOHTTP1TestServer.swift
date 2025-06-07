@@ -272,9 +272,7 @@ public final class NIOHTTP1TestServer {
             try channel.pipeline.syncOperations.addHandler(TransformerHandler())
             _ = try channel.syncOptions!.setOption(.autoRead, value: true)
         } catch {
-            // This happens when the channel has been closed while it was waiting in
-            // the pipeline. It's benign: the closure passed to the close future above will
-            // have executed already, and started working on getting the next channel.
+            print("Channel initialization failed with: \(error)")
             channel.close(promise: nil)
         }
     }

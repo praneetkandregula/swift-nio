@@ -408,19 +408,13 @@ class ChannelNotificationTest: XCTestCase {
             ServerBootstrap(group: group)
                 .serverChannelOption(.socketOption(.so_reuseaddr), value: 1)
                 .serverChannelInitializer { channel in
-                    channel.eventLoop.makeCompletedFuture {
-                        try channel.pipeline.syncOperations.addHandler(
-                            ServerSocketChannelLifecycleVerificationHandler()
-                        )
-                    }
+                    channel.pipeline.addHandler(ServerSocketChannelLifecycleVerificationHandler())
                 }
                 .childChannelOption(.autoRead, value: false)
                 .childChannelInitializer { channel in
-                    channel.eventLoop.makeCompletedFuture {
-                        try channel.pipeline.syncOperations.addHandler(
-                            AcceptedSocketChannelLifecycleVerificationHandler(acceptedChannelPromise)
-                        )
-                    }
+                    channel.pipeline.addHandler(
+                        AcceptedSocketChannelLifecycleVerificationHandler(acceptedChannelPromise)
+                    )
                 }
                 .bind(host: "127.0.0.1", port: 0).wait()
         )
@@ -428,11 +422,7 @@ class ChannelNotificationTest: XCTestCase {
         let clientChannel = try assertNoThrowWithValue(
             ClientBootstrap(group: group)
                 .channelInitializer { channel in
-                    channel.eventLoop.makeCompletedFuture {
-                        try channel.pipeline.syncOperations.addHandler(
-                            SocketChannelLifecycleVerificationHandler()
-                        )
-                    }
+                    channel.pipeline.addHandler(SocketChannelLifecycleVerificationHandler())
                 }
                 .connect(to: serverChannel.localAddress!).wait()
         )
@@ -509,9 +499,7 @@ class ChannelNotificationTest: XCTestCase {
                 .serverChannelOption(.socketOption(.so_reuseaddr), value: 1)
                 .childChannelOption(.autoRead, value: true)
                 .childChannelInitializer { channel in
-                    channel.eventLoop.makeCompletedFuture {
-                        try channel.pipeline.syncOperations.addHandler(OrderVerificationHandler(promise))
-                    }
+                    channel.pipeline.addHandler(OrderVerificationHandler(promise))
                 }
                 .bind(host: "127.0.0.1", port: 0).wait()
         )

@@ -52,7 +52,7 @@ extension Array where Element == Channel {
     }
 }
 
-private final class DummyError: Error, Equatable {
+private class DummyError: Error, Equatable {
     // For dummy error equality is identity.
     static func == (lhs: DummyError, rhs: DummyError) -> Bool {
         ObjectIdentifier(lhs) == ObjectIdentifier(rhs)
@@ -75,7 +75,7 @@ private class ConnectRecorder: ChannelOutboundHandler {
     public func connect(context: ChannelHandlerContext, to: SocketAddress, promise: EventLoopPromise<Void>?) {
         self.targetHost = to.toString()
         let connectPromise = promise ?? context.eventLoop.makePromise()
-        connectPromise.futureResult.hop(to: context.eventLoop).assumeIsolated().whenSuccess {
+        connectPromise.futureResult.whenSuccess {
             self.state = .connected
         }
         context.connect(to: to, promise: connectPromise)
@@ -83,8 +83,7 @@ private class ConnectRecorder: ChannelOutboundHandler {
 
     public func close(context: ChannelHandlerContext, mode: CloseMode, promise: EventLoopPromise<Void>?) {
         let connectPromise = promise ?? context.eventLoop.makePromise()
-        connectPromise.futureResult.hop(to: context.eventLoop).assumeIsolated().whenComplete {
-            (_: Result<Void, Error>) in
+        connectPromise.futureResult.whenComplete { (_: Result<Void, Error>) in
             self.state = .closed
         }
         context.close(promise: connectPromise)
@@ -95,9 +94,9 @@ private class ConnectionDelayer: ChannelOutboundHandler {
     typealias OutboundIn = Any
     typealias OutboundOut = Any
 
-    var connectPromise: EventLoopPromise<Void>?
+    public var connectPromise: EventLoopPromise<Void>?
 
-    func connect(context: ChannelHandlerContext, to address: SocketAddress, promise: EventLoopPromise<Void>?) {
+    public func connect(context: ChannelHandlerContext, to address: SocketAddress, promise: EventLoopPromise<Void>?) {
         self.connectPromise = promise
     }
 }
@@ -200,49 +199,42 @@ extension EventLoopFuture {
     fileprivate func getError() -> Error? {
         guard self.isFulfilled else { return nil }
 
-        let errorBox = NIOLockedValueBox<Error?>(nil)
-        self.whenFailure { error in
-            errorBox.withLockedValue { $0 = error }
-        }
-        return errorBox.withLockedValue { $0! }
+        var error: Error? = nil
+        self.whenFailure { error = $0 }
+        return error!
     }
 }
 
 // A simple resolver that allows control over the DNS resolution process.
-private final class DummyResolver: Resolver, Sendable {
+private class DummyResolver: Resolver {
     let v4Promise: EventLoopPromise<[SocketAddress]>
     let v6Promise: EventLoopPromise<[SocketAddress]>
 
-    enum Event: Sendable {
+    enum Event {
         case a(host: String, port: Int)
         case aaaa(host: String, port: Int)
         case cancel
     }
 
-    private let _events: NIOLockedValueBox<[Event]>
-
-    var events: [Event] {
-        self._events.withLockedValue { $0 }
-    }
+    var events: [Event] = []
 
     init(loop: EventLoop) {
-        self._events = NIOLockedValueBox([])
         self.v4Promise = loop.makePromise()
         self.v6Promise = loop.makePromise()
     }
 
     func initiateAQuery(host: String, port: Int) -> EventLoopFuture<[SocketAddress]> {
-        self._events.withLockedValue { $0.append(.a(host: host, port: port)) }
+        events.append(.a(host: host, port: port))
         return self.v4Promise.futureResult
     }
 
     func initiateAAAAQuery(host: String, port: Int) -> EventLoopFuture<[SocketAddress]> {
-        self._events.withLockedValue { $0.append(.aaaa(host: host, port: port)) }
+        events.append(.aaaa(host: host, port: port))
         return self.v6Promise.futureResult
     }
 
     func cancelQueries() {
-        self._events.withLockedValue { $0.append(.cancel) }
+        events.append(.cancel)
     }
 }
 
@@ -278,7 +270,7 @@ private func buildEyeballer(
     return (eyeballer: eyeballer, resolver: resolver, loop: loop)
 }
 
-final class HappyEyeballsTest: XCTestCase {
+public final class HappyEyeballsTest: XCTestCase {
     func testIPv4OnlyResolution() throws {
         let (eyeballer, resolver, loop) = buildEyeballer(host: "example.com", port: 80)
         let targetFuture = eyeballer.resolveAndConnect().flatMapThrowing { (channel) -> String? in
@@ -606,11 +598,7 @@ final class HappyEyeballsTest: XCTestCase {
         let (eyeballer, resolver, loop) = buildEyeballer(host: "example.com", port: 80, connectTimeout: .hours(1)) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture
@@ -679,11 +667,7 @@ final class HappyEyeballsTest: XCTestCase {
         let (eyeballer, resolver, loop) = buildEyeballer(host: "example.com", port: 80, connectTimeout: .hours(1)) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture
@@ -753,11 +737,7 @@ final class HappyEyeballsTest: XCTestCase {
         let (eyeballer, resolver, loop) = buildEyeballer(host: "example.com", port: 80, connectTimeout: .hours(1)) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture
@@ -848,11 +828,7 @@ final class HappyEyeballsTest: XCTestCase {
         ) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture
@@ -901,11 +877,7 @@ final class HappyEyeballsTest: XCTestCase {
         ) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture
@@ -960,11 +932,7 @@ final class HappyEyeballsTest: XCTestCase {
         let (eyeballer, resolver, loop) = buildEyeballer(host: "example.com", port: 80, connectTimeout: .hours(1)) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture
@@ -1014,11 +982,7 @@ final class HappyEyeballsTest: XCTestCase {
         ) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture
@@ -1063,11 +1027,7 @@ final class HappyEyeballsTest: XCTestCase {
         let (eyeballer, resolver, loop) = buildEyeballer(host: "example.com", port: 80) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture
@@ -1117,11 +1077,7 @@ final class HappyEyeballsTest: XCTestCase {
         let (eyeballer, resolver, loop) = buildEyeballer(host: "example.com", port: 80) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture
@@ -1264,11 +1220,7 @@ final class HappyEyeballsTest: XCTestCase {
         ) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture
@@ -1316,11 +1268,7 @@ final class HappyEyeballsTest: XCTestCase {
         ) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture
@@ -1390,11 +1338,7 @@ final class HappyEyeballsTest: XCTestCase {
         let (eyeballer, resolver, loop) = buildEyeballer(host: "example.com", port: 80) {
             let channelFuture = defaultChannelBuilder(loop: $0, family: $1)
             channelFuture.whenSuccess { channel in
-                try! channel.pipeline.syncOperations.addHandler(
-                    ConnectionDelayer(),
-                    name: CONNECT_DELAYER,
-                    position: .first
-                )
+                try! channel.pipeline.addHandler(ConnectionDelayer(), name: CONNECT_DELAYER, position: .first).wait()
                 channels.append(channel)
             }
             return channelFuture

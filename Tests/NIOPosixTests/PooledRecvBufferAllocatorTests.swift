@@ -17,10 +17,10 @@ import XCTest
 
 @testable import NIOPosix
 
-internal final class NIOPooledRecvBufferAllocatorTests: XCTestCase {
+internal final class PooledRecvBufferAllocatorTests: XCTestCase {
     func testPoolFillsToCapacity() {
         let allocator = ByteBufferAllocator()
-        var pool = NIOPooledRecvBufferAllocator(
+        var pool = PooledRecvBufferAllocator(
             capacity: 3,
             recvAllocator: FixedSizeRecvByteBufferAllocator(capacity: 1024)
         )
@@ -55,7 +55,7 @@ internal final class NIOPooledRecvBufferAllocatorTests: XCTestCase {
 
     func testBuffersAreRecycled() {
         let allocator = ByteBufferAllocator()
-        var pool = NIOPooledRecvBufferAllocator(
+        var pool = PooledRecvBufferAllocator(
             capacity: 5,
             recvAllocator: FixedSizeRecvByteBufferAllocator(capacity: 1024)
         )
@@ -76,7 +76,7 @@ internal final class NIOPooledRecvBufferAllocatorTests: XCTestCase {
 
     func testFirstAvailableBufferUsed() {
         let allocator = ByteBufferAllocator()
-        var pool = NIOPooledRecvBufferAllocator(
+        var pool = PooledRecvBufferAllocator(
             capacity: 3,
             recvAllocator: FixedSizeRecvByteBufferAllocator(capacity: 1024)
         )
@@ -99,7 +99,7 @@ internal final class NIOPooledRecvBufferAllocatorTests: XCTestCase {
 
     func testBuffersAreClearedBetweenCalls() {
         let allocator = ByteBufferAllocator()
-        var pool = NIOPooledRecvBufferAllocator(
+        var pool = PooledRecvBufferAllocator(
             capacity: 3,
             recvAllocator: FixedSizeRecvByteBufferAllocator(capacity: 1024)
         )
@@ -135,7 +135,7 @@ internal final class NIOPooledRecvBufferAllocatorTests: XCTestCase {
 
     func testPoolCapacityIncrease() {
         let allocator = ByteBufferAllocator()
-        var pool = NIOPooledRecvBufferAllocator(
+        var pool = PooledRecvBufferAllocator(
             capacity: 3,
             recvAllocator: FixedSizeRecvByteBufferAllocator(capacity: 1024)
         )
@@ -171,7 +171,7 @@ internal final class NIOPooledRecvBufferAllocatorTests: XCTestCase {
 
     func testPoolCapacityDecrease() {
         let allocator = ByteBufferAllocator()
-        var pool = NIOPooledRecvBufferAllocator(
+        var pool = PooledRecvBufferAllocator(
             capacity: 5,
             recvAllocator: FixedSizeRecvByteBufferAllocator(capacity: 1024)
         )
@@ -189,6 +189,17 @@ internal final class NIOPooledRecvBufferAllocatorTests: XCTestCase {
         pool.updateCapacity(to: 3)
         XCTAssertEqual(pool.count, 3)
         XCTAssertEqual(pool.capacity, 3)
+    }
+}
+
+extension ByteBuffer {
+    // Copied from NIOCoreTests/ByteBufferTest.swift
+    fileprivate func storagePointerIntegerValue() -> UInt {
+        var pointer: UInt = 0
+        self.withVeryUnsafeBytes { ptr in
+            pointer = UInt(bitPattern: ptr.baseAddress!)
+        }
+        return pointer
     }
 }
 

@@ -15,10 +15,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define DECLARE_ATOMIC_OPERATIONS(type, name)                                                                                         \
   struct catmc_atomic_ ## name;                                                                                                       \
                                                                                                                                       \
@@ -82,7 +78,3 @@ DECLARE_ATOMIC_OPERATIONS(intptr_t, intptr_t)
 DECLARE_ATOMIC_OPERATIONS(uintptr_t, uintptr_t)
 
 #undef DECLARE_ATOMIC_OPERATIONS
-
-#ifdef __cplusplus
-}  /* extern "C" */
-#endif

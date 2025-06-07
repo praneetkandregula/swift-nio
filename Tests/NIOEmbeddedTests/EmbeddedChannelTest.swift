@@ -463,13 +463,6 @@ class EmbeddedChannelTest: XCTestCase {
         try bindPromise.futureResult.wait()
     }
 
-    func testSetLocalAddressAfterSuccessfulBindWithoutPromise() throws {
-        let channel = EmbeddedChannel()
-        let socketAddress = try SocketAddress(ipAddress: "127.0.0.1", port: 0)
-        channel.bind(to: socketAddress, promise: nil)
-        XCTAssertEqual(channel.localAddress, socketAddress)
-    }
-
     func testSetRemoteAddressAfterSuccessfulConnect() throws {
         let channel = EmbeddedChannel()
         let connectPromise = channel.eventLoop.makePromise(of: Void.self)
@@ -479,13 +472,6 @@ class EmbeddedChannelTest: XCTestCase {
             XCTAssertEqual(channel.remoteAddress, socketAddress)
         }
         try connectPromise.futureResult.wait()
-    }
-
-    func testSetRemoteAddressAfterSuccessfulConnectWithoutPromise() throws {
-        let channel = EmbeddedChannel()
-        let socketAddress = try SocketAddress(ipAddress: "127.0.0.1", port: 0)
-        channel.connect(to: socketAddress, promise: nil)
-        XCTAssertEqual(channel.remoteAddress, socketAddress)
     }
 
     func testUnprocessedOutboundUserEventFailsOnEmbeddedChannel() {

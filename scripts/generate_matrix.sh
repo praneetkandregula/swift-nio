@@ -16,7 +16,7 @@
 # Parameters
 linux_command="$MATRIX_LINUX_COMMAND"  # required if any Linux pipeline is enabled
 linux_setup_command="$MATRIX_LINUX_SETUP_COMMAND"
-linux_5_9_enabled="${MATRIX_LINUX_5_9_ENABLED:=false}"
+linux_5_9_enabled="${MATRIX_LINUX_5_9_ENABLED:=true}"
 linux_5_9_command_arguments="$MATRIX_LINUX_5_9_COMMAND_ARGUMENTS"
 linux_5_10_enabled="${MATRIX_LINUX_5_10_ENABLED:=true}"
 linux_5_10_command_arguments="$MATRIX_LINUX_5_10_COMMAND_ARGUMENTS"
@@ -46,7 +46,7 @@ linux_5_9_container_image="swift:5.9-jammy"
 linux_5_10_container_image="swift:5.10-jammy"
 linux_6_0_container_image="swift:6.0-jammy"
 linux_6_1_container_image="swift:6.1-jammy"
-linux_nightly_next_container_image="swiftlang/swift:nightly-6.2-jammy"
+linux_nightly_next_container_image="swiftlang/swift:nightly-6.1-jammy"
 linux_nightly_main_container_image="swiftlang/swift:nightly-main-jammy"
 
 windows_6_0_runner="windows-2022"
@@ -54,7 +54,7 @@ windows_6_0_container_image="swift:6.0-windowsservercore-ltsc2022"
 windows_6_1_runner="windows-2022"
 windows_6_1_container_image="swift:6.1-windowsservercore-ltsc2022"
 windows_nightly_next_runner="windows-2019"
-windows_nightly_next_container_image="swiftlang/swift:nightly-6.2-windowsservercore-1809"
+windows_nightly_next_container_image="swiftlang/swift:nightly-6.1-windowsservercore-1809"
 windows_nightly_main_runner="windows-2019"
 windows_nightly_main_container_image="swiftlang/swift:nightly-main-windowsservercore-1809"
 

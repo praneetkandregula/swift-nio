@@ -12,9 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if (!canImport(Darwin) && compiler(>=5.9)) || (canImport(Darwin) && compiler(>=5.10))
 import NIOCore
-import NIOHTTP1
 import NIOPosix
+import NIOHTTP1
 import NIOWebSocket
 
 @available(macOS 14, iOS 17, tvOS 17, watchOS 10, *)
@@ -138,3 +139,12 @@ struct Client {
         }
     }
 }
+
+#else
+@main
+struct Server {
+    static func main() {
+        fatalError("Requires at least Swift 5.9")
+    }
+}
+#endif

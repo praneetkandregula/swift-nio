@@ -118,12 +118,12 @@ private final class TLSUserEventHandler: ChannelInboundHandler, RemovableChannel
             let alpn = String(string.dropFirst(15))
             context.writeAndFlush(.init(ByteBuffer(string: "alpn:\(alpn)")), promise: nil)
             context.fireUserInboundEventTriggered(TLSUserEvent.handshakeCompleted(negotiatedProtocol: alpn))
-            context.pipeline.syncOperations.removeHandler(self, promise: nil)
+            context.pipeline.removeHandler(self, promise: nil)
         } else if string.hasPrefix("alpn:") {
             context.fireUserInboundEventTriggered(
                 TLSUserEvent.handshakeCompleted(negotiatedProtocol: String(string.dropFirst(5)))
             )
-            context.pipeline.syncOperations.removeHandler(self, promise: nil)
+            context.pipeline.removeHandler(self, promise: nil)
         } else {
             context.fireChannelRead(data)
         }
@@ -702,7 +702,7 @@ final class AsyncChannelBootstrapTests: XCTestCase {
         try await withThrowingTaskGroup(of: EventLoopFuture<NegotiationResult>.self) { group in
             group.addTask {
                 // We have to use a fixed port here since we only get the channel once protocol negotiation is done
-                try await Self.makeUDPServerChannelWithProtocolNegotiation(
+                try await self.makeUDPServerChannelWithProtocolNegotiation(
                     eventLoopGroup: eventLoopGroup,
                     port: port
                 )
@@ -713,7 +713,7 @@ final class AsyncChannelBootstrapTests: XCTestCase {
 
             group.addTask {
                 // We have to use a fixed port here since we only get the channel once protocol negotiation is done
-                try await Self.makeUDPClientChannelWithProtocolNegotiation(
+                try await self.makeUDPClientChannelWithProtocolNegotiation(
                     eventLoopGroup: eventLoopGroup,
                     port: port,
                     proposedALPN: .string
@@ -1063,7 +1063,7 @@ final class AsyncChannelBootstrapTests: XCTestCase {
         try await withThrowingTaskGroup(of: EventLoopFuture<NegotiationResult>.self) { group in
             group.addTask {
                 // We have to use a fixed port here since we only get the channel once protocol negotiation is done
-                try await Self.makeRawSocketServerChannelWithProtocolNegotiation(
+                try await self.makeRawSocketServerChannelWithProtocolNegotiation(
                     eventLoopGroup: eventLoopGroup
                 )
             }
@@ -1072,7 +1072,7 @@ final class AsyncChannelBootstrapTests: XCTestCase {
             try await Task.sleep(nanoseconds: 100_000_000)
 
             group.addTask {
-                try await Self.makeRawSocketClientChannelWithProtocolNegotiation(
+                try await self.makeRawSocketClientChannelWithProtocolNegotiation(
                     eventLoopGroup: eventLoopGroup,
                     proposedALPN: .string
                 )
@@ -1239,7 +1239,7 @@ final class AsyncChannelBootstrapTests: XCTestCase {
             }
     }
 
-    private static func makeRawSocketServerChannelWithProtocolNegotiation(
+    private func makeRawSocketServerChannelWithProtocolNegotiation(
         eventLoopGroup: EventLoopGroup
     ) async throws -> EventLoopFuture<NegotiationResult> {
         try await NIORawSocketBootstrap(group: eventLoopGroup)
@@ -1262,7 +1262,7 @@ final class AsyncChannelBootstrapTests: XCTestCase {
             }
     }
 
-    private static func makeRawSocketClientChannelWithProtocolNegotiation(
+    private func makeRawSocketClientChannelWithProtocolNegotiation(
         eventLoopGroup: EventLoopGroup,
         proposedALPN: TLSUserEventHandler.ALPN
     ) async throws -> EventLoopFuture<NegotiationResult> {
@@ -1371,7 +1371,7 @@ final class AsyncChannelBootstrapTests: XCTestCase {
             }
     }
 
-    private static func makeUDPServerChannelWithProtocolNegotiation(
+    private func makeUDPServerChannelWithProtocolNegotiation(
         eventLoopGroup: EventLoopGroup,
         port: Int,
         proposedALPN: TLSUserEventHandler.ALPN? = nil
@@ -1407,7 +1407,7 @@ final class AsyncChannelBootstrapTests: XCTestCase {
             }
     }
 
-    private static func makeUDPClientChannelWithProtocolNegotiation(
+    private func makeUDPClientChannelWithProtocolNegotiation(
         eventLoopGroup: EventLoopGroup,
         port: Int,
         proposedALPN: TLSUserEventHandler.ALPN

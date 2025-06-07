@@ -292,7 +292,7 @@ class EventLoopFutureTest: XCTestCase {
         let promises: [EventLoopPromise<Int>] = (0..<100).map { (_: Int) in eventLoop.makePromise() }
         let futures = promises.map { $0.futureResult }
 
-        let fN: EventLoopFuture<Int> = EventLoopFuture<Int>.reduce(0, futures, on: eventLoop) { $0 + $1 }
+        let fN: EventLoopFuture<Int> = EventLoopFuture<Int>.reduce(0, futures, on: eventLoop, +)
         _ = promises.map { $0.fail(E()) }
         XCTAssert(fN.eventLoop === eventLoop)
         XCTAssertThrowsError(try fN.wait()) { error in
@@ -311,7 +311,7 @@ class EventLoopFutureTest: XCTestCase {
 
         let futures = promises.map { $0.futureResult }
 
-        let fN: EventLoopFuture<Int> = EventLoopFuture<Int>.reduce(0, futures, on: eventLoop) { $0 + $1 }
+        let fN: EventLoopFuture<Int> = EventLoopFuture<Int>.reduce(0, futures, on: eventLoop, +)
         XCTAssert(fN.eventLoop === eventLoop)
         XCTAssertThrowsError(try fN.wait()) { error in
             XCTAssertNotNil(error as? E)
@@ -327,7 +327,7 @@ class EventLoopFutureTest: XCTestCase {
         promises.insert(failedPromise, at: promises.startIndex)
 
         let futures = promises.map { $0.futureResult }
-        let fN: EventLoopFuture<Int> = EventLoopFuture<Int>.reduce(0, futures, on: eventLoop) { $0 + $1 }
+        let fN: EventLoopFuture<Int> = EventLoopFuture<Int>.reduce(0, futures, on: eventLoop, +)
 
         failedPromise.fail(E())
 
@@ -437,7 +437,7 @@ class EventLoopFutureTest: XCTestCase {
             $0.count
         }.flatMapThrowing {
             1 + $0
-        }.assumeIsolated().whenSuccess {
+        }.whenSuccess {
             ran = true
             XCTAssertEqual($0, 6)
         }
@@ -460,7 +460,7 @@ class EventLoopFutureTest: XCTestCase {
         }.map { (x: Int) -> Int in
             XCTFail("shouldn't have been called")
             return x
-        }.assumeIsolated().whenFailure {
+        }.whenFailure {
             ran = true
             XCTAssertEqual(.some(DummyError.dummyError), $0 as? DummyError)
         }
@@ -483,7 +483,7 @@ class EventLoopFutureTest: XCTestCase {
         }.flatMapErrorThrowing { (_: Error) in
             XCTFail("shouldn't have been called")
             return 5
-        }.assumeIsolated().whenSuccess {
+        }.whenSuccess {
             ran = true
             XCTAssertEqual($0, 5)
         }
@@ -507,7 +507,7 @@ class EventLoopFutureTest: XCTestCase {
         }.map { (x: Int) -> Int in
             XCTFail("shouldn't have been called")
             return x
-        }.assumeIsolated().whenFailure {
+        }.whenFailure {
             ran = true
             XCTAssertEqual(.some(DummyError.dummyError2), $0 as? DummyError)
         }
@@ -519,7 +519,7 @@ class EventLoopFutureTest: XCTestCase {
         let eventLoop = EmbeddedEventLoop()
         var state = 0
         let p: EventLoopPromise<Void> = EventLoopPromise(eventLoop: eventLoop, file: #filePath, line: #line)
-        p.futureResult.assumeIsolated().map {
+        p.futureResult.map {
             XCTAssertEqual(state, 0)
             state += 1
         }.map {

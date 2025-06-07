@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIOConcurrencyHelpers
 import NIOEmbedded
 import NIOHTTP1
 import XCTest
@@ -138,12 +137,11 @@ struct WebSocketServerUpgraderConfiguration {
 
 class WebSocketServerEndToEndTests: XCTestCase {
     func createTestFixtures(
-        upgraders: [WebSocketServerUpgraderConfiguration],
-        loop: EmbeddedEventLoop? = nil
+        upgraders: [WebSocketServerUpgraderConfiguration]
     ) -> (loop: EmbeddedEventLoop, serverChannel: EmbeddedChannel, clientChannel: EmbeddedChannel) {
-        let loop = loop ?? EmbeddedEventLoop()
+        let loop = EmbeddedEventLoop()
         let serverChannel = EmbeddedChannel(loop: loop)
-        let upgraders: [HTTPServerProtocolUpgrader & Sendable] = upgraders.map {
+        let upgraders = upgraders.map {
             NIOWebSocketServerUpgrader(
                 maxFrameSize: $0.maxFrameSize,
                 automaticErrorHandling: $0.automaticErrorHandling,
@@ -154,7 +152,7 @@ class WebSocketServerEndToEndTests: XCTestCase {
         XCTAssertNoThrow(
             try serverChannel.pipeline.configureHTTPServerPipeline(
                 withServerUpgrade: (
-                    upgraders: upgraders,
+                    upgraders: upgraders as [HTTPServerProtocolUpgrader],
                     completionHandler: { (context: ChannelHandlerContext) in }
                 )
             ).wait()
@@ -267,17 +265,16 @@ class WebSocketServerEndToEndTests: XCTestCase {
     func testCanDelayAcceptingUpgrade() throws {
         // This accept promise is going to be written to from a callback. This is only safe because we use
         // embedded channels.
-        let acceptPromise = NIOLockedValueBox<EventLoopPromise<HTTPHeaders?>?>(nil)
-        let upgradeComplete = NIOLockedValueBox(false)
+        var acceptPromise: EventLoopPromise<HTTPHeaders?>? = nil
+        var upgradeComplete = false
 
         let basicUpgrader = WebSocketServerUpgraderConfiguration(
             shouldUpgrade: { (channel, head) in
-                let promise = channel.eventLoop.makePromise(of: Optional<HTTPHeaders>.self)
-                acceptPromise.withLockedValue { $0 = promise }
-                return promise.futureResult
+                acceptPromise = channel.eventLoop.makePromise()
+                return acceptPromise!.futureResult
             },
             upgradePipelineHandler: { (channel, req) in
-                upgradeComplete.withLockedValue { $0 = true }
+                upgradeComplete = true
                 return channel.eventLoop.makeSucceededFuture(())
             }
         )
@@ -288,7 +285,7 @@ class WebSocketServerEndToEndTests: XCTestCase {
             XCTAssertNoThrow(try loop.syncShutdownGracefully())
         }
 
-        XCTAssertNil(acceptPromise.withLockedValue { $0 })
+        XCTAssertNil(acceptPromise)
 
         let upgradeRequest = self.upgradeRequest(extraHeaders: [
             "Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": "AQIDBAUGBwgJCgsMDQ4PEC==",
@@ -300,12 +297,12 @@ class WebSocketServerEndToEndTests: XCTestCase {
 
         // No upgrade should have occurred yet.
         XCTAssertNoThrow(XCTAssertNil(try client.readInbound(as: ByteBuffer.self)))
-        XCTAssertFalse(upgradeComplete.withLockedValue { $0 })
+        XCTAssertFalse(upgradeComplete)
 
         // Satisfy the promise. This will cause the upgrade to complete.
-        acceptPromise.withLockedValue { $0?.succeed(HTTPHeaders()) }
+        acceptPromise?.succeed(HTTPHeaders())
         loop.run()
-        XCTAssertTrue(upgradeComplete.withLockedValue { $0 })
+        XCTAssertTrue(upgradeComplete)
         XCTAssertNoThrow(try interactInMemory(client, server, eventLoop: loop))
 
         XCTAssertNoThrow(
@@ -470,19 +467,15 @@ class WebSocketServerEndToEndTests: XCTestCase {
     }
 
     func testSendAFewFrames() throws {
-        let embeddedEventLoop = EmbeddedEventLoop()
-        let recorder = NIOLoopBound(WebSocketRecorderHandler(), eventLoop: embeddedEventLoop)
-
+        let recorder = WebSocketRecorderHandler()
         let basicUpgrader = WebSocketServerUpgraderConfiguration(
             shouldUpgrade: { (channel, head) in channel.eventLoop.makeSucceededFuture(HTTPHeaders()) },
             upgradePipelineHandler: { (channel, req) in
-                channel.eventLoop.makeCompletedFuture {
-                    try channel.pipeline.syncOperations.addHandler(recorder.value)
-                }
+                channel.pipeline.addHandler(recorder)
+
             }
         )
-
-        let (loop, server, client) = self.createTestFixtures(upgraders: [basicUpgrader], loop: embeddedEventLoop)
+        let (loop, server, client) = self.createTestFixtures(upgraders: [basicUpgrader])
         defer {
             XCTAssertNoThrow(try client.finish())
             XCTAssertNoThrow(try server.finish())
@@ -519,7 +512,7 @@ class WebSocketServerEndToEndTests: XCTestCase {
         XCTAssertNoThrow(try client.writeAndFlush(pingFrame).wait())
         XCTAssertNoThrow(try interactInMemory(client, server, eventLoop: loop))
 
-        XCTAssertEqual(recorder.value.frames, [dataFrame, pingFrame])
+        XCTAssertEqual(recorder.frames, [dataFrame, pingFrame])
     }
 
     func testMaxFrameSize() throws {
@@ -560,18 +553,15 @@ class WebSocketServerEndToEndTests: XCTestCase {
     }
 
     func testAutomaticErrorHandling() throws {
-        let embeddedEventLoop = EmbeddedEventLoop()
-        let recorder = NIOLoopBound(WebSocketRecorderHandler(), eventLoop: embeddedEventLoop)
-
+        let recorder = WebSocketRecorderHandler()
         let basicUpgrader = WebSocketServerUpgraderConfiguration(
             shouldUpgrade: { (channel, head) in channel.eventLoop.makeSucceededFuture(HTTPHeaders()) },
             upgradePipelineHandler: { (channel, req) in
-                channel.eventLoop.makeCompletedFuture {
-                    try channel.pipeline.syncOperations.addHandler(recorder.value)
-                }
+                channel.pipeline.addHandler(recorder)
+
             }
         )
-        let (loop, server, client) = self.createTestFixtures(upgraders: [basicUpgrader], loop: embeddedEventLoop)
+        let (loop, server, client) = self.createTestFixtures(upgraders: [basicUpgrader])
         defer {
             XCTAssertNoThrow(try client.finish())
             XCTAssertNoThrow(try server.finishAcceptingAlreadyClosed())
@@ -603,27 +593,24 @@ class WebSocketServerEndToEndTests: XCTestCase {
             XCTAssertEqual(NIOWebSocketError.multiByteControlFrameLength, error as? NIOWebSocketError)
         }
 
-        XCTAssertEqual(recorder.value.errors.count, 1)
-        XCTAssertEqual(recorder.value.errors.first as? NIOWebSocketError, .some(.multiByteControlFrameLength))
+        XCTAssertEqual(recorder.errors.count, 1)
+        XCTAssertEqual(recorder.errors.first as? NIOWebSocketError, .some(.multiByteControlFrameLength))
 
         // The client should have received a close frame, if we'd continued interacting.
         XCTAssertNoThrow(XCTAssertEqual(try server.readAllOutboundBytes(), [0x88, 0x02, 0x03, 0xEA]))
     }
 
     func testNoAutomaticErrorHandling() throws {
-        let embeddedEventLoop = EmbeddedEventLoop()
-        let recorder = NIOLoopBound(WebSocketRecorderHandler(), eventLoop: embeddedEventLoop)
-
+        let recorder = WebSocketRecorderHandler()
         let basicUpgrader = WebSocketServerUpgraderConfiguration(
             automaticErrorHandling: false,
             shouldUpgrade: { (channel, head) in channel.eventLoop.makeSucceededFuture(HTTPHeaders()) },
             upgradePipelineHandler: { (channel, req) in
-                channel.eventLoop.makeCompletedFuture {
-                    try channel.pipeline.syncOperations.addHandler(recorder.value)
-                }
+                channel.pipeline.addHandler(recorder)
+
             }
         )
-        let (loop, server, client) = self.createTestFixtures(upgraders: [basicUpgrader], loop: embeddedEventLoop)
+        let (loop, server, client) = self.createTestFixtures(upgraders: [basicUpgrader])
         defer {
             XCTAssertNoThrow(try client.finish())
             XCTAssertNoThrow(try server.finishAcceptingAlreadyClosed())
@@ -655,21 +642,21 @@ class WebSocketServerEndToEndTests: XCTestCase {
             XCTAssertEqual(NIOWebSocketError.multiByteControlFrameLength, error as? NIOWebSocketError)
         }
 
-        XCTAssertEqual(recorder.value.errors.count, 1)
-        XCTAssertEqual(recorder.value.errors.first as? NIOWebSocketError, .some(.multiByteControlFrameLength))
+        XCTAssertEqual(recorder.errors.count, 1)
+        XCTAssertEqual(recorder.errors.first as? NIOWebSocketError, .some(.multiByteControlFrameLength))
 
         // The client should not have received a close frame, if we'd continued interacting.
         XCTAssertNoThrow(XCTAssertEqual([], try server.readAllOutboundBytes()))
     }
 }
 
+#if !canImport(Darwin) || swift(>=5.10)
 @available(macOS 13, iOS 16, tvOS 16, watchOS 9, *)
 final class TypedWebSocketServerEndToEndTests: WebSocketServerEndToEndTests {
     override func createTestFixtures(
-        upgraders: [WebSocketServerUpgraderConfiguration],
-        loop: EmbeddedEventLoop? = nil
+        upgraders: [WebSocketServerUpgraderConfiguration]
     ) -> (loop: EmbeddedEventLoop, serverChannel: EmbeddedChannel, clientChannel: EmbeddedChannel) {
-        let loop = loop ?? EmbeddedEventLoop()
+        let loop = EmbeddedEventLoop()
         let serverChannel = EmbeddedChannel(loop: loop)
         let upgraders = upgraders.map {
             NIOTypedWebSocketServerUpgrader(
@@ -694,3 +681,4 @@ final class TypedWebSocketServerEndToEndTests: WebSocketServerEndToEndTests {
         return (loop: loop, serverChannel: serverChannel, clientChannel: clientChannel)
     }
 }
+#endif

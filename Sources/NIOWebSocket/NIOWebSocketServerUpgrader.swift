@@ -181,6 +181,7 @@ public final class NIOWebSocketServerUpgrader: HTTPServerProtocolUpgrader, Senda
     }
 }
 
+#if !canImport(Darwin) || swift(>=5.10)
 /// A `NIOTypedHTTPServerProtocolUpgrader` that knows how to do the WebSocket upgrade dance.
 ///
 /// Users may frequently want to offer multiple websocket endpoints on the same port. For this
@@ -264,6 +265,7 @@ public final class NIOTypedWebSocketServerUpgrader<UpgradeResult: Sendable>: NIO
         )
     }
 }
+#endif
 
 private func _buildUpgradeResponse(
     channel: Channel,

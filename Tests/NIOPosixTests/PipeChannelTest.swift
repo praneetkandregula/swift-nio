@@ -74,7 +74,7 @@ final class PipeChannelTest: XCTestCase {
     }
 
     func testBasicIO() throws {
-        final class Handler: ChannelInboundHandler, Sendable {
+        class Handler: ChannelInboundHandler {
             typealias InboundIn = ByteBuffer
 
             func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -145,7 +145,7 @@ final class PipeChannelTest: XCTestCase {
     }
 
     func testWeWorkFineWithASingleFileDescriptor() throws {
-        final class EchoHandler: ChannelInboundHandler, Sendable {
+        final class EchoHandler: ChannelInboundHandler {
             typealias InboundIn = ByteBuffer
             typealias OutboundOut = ByteBuffer
 

@@ -12,48 +12,67 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Dispatch
+import NIOConcurrencyHelpers
 import NIOCore
 import XCTest
 
-final class SALEventLoopTests: XCTestCase {
+@testable import NIOPosix
+
+final class SALEventLoopTests: XCTestCase, SALTest {
+    var group: MultiThreadedEventLoopGroup!
+    var kernelToUserBox: LockedBox<KernelToUser>!
+    var userToKernelBox: LockedBox<UserToKernel>!
+    var wakeups: LockedBox<()>!
+
+    override func setUp() {
+        self.setUpSAL()
+    }
+
+    override func tearDown() {
+        self.tearDownSAL()
+    }
+
     func testSchedulingTaskOnSleepingLoopWakesUpOnce() throws {
-        try withSALContext { context in
-            try context.runSALOnEventLoopAndWait { thisLoop, _, _ in
-                // We're going to execute some tasks on the loop. This will force a single wakeup, as the first task will wedge the loop open.
-                // However, we're currently _on_ the loop so the first thing we have to do is give it up.
-                let promise = thisLoop.makePromise(of: Void.self)
+        let thisLoop = self.group.next()
 
-                DispatchQueue(label: "background").asyncAfter(deadline: .now() + .milliseconds(100)) {
-                    let semaphore = DispatchSemaphore(value: 0)
+        try thisLoop.runSAL(syscallAssertions: {
+            try self.assertParkedRightNow()
 
-                    thisLoop.execute {
-                        // Wedge the loop open. This will also _wake_ the loop.
-                        XCTAssertEqual(semaphore.wait(timeout: .now() + .milliseconds(500)), .success)
-                    }
+            try self.assertWakeup()
 
-                    // Now execute 10 tasks.
-                    for _ in 0..<10 {
-                        thisLoop.execute {}
-                    }
+            // We actually need to wait for the inner code to exit, as the optimisation we're testing here will remove a signal that the
+            // SAL is actually going to wait for in salWait().
+            try self.assertParkedRightNow()
+        }) { () -> EventLoopFuture<Void> in
+            // We're going to execute some tasks on the loop. This will force a single wakeup, as the first task will wedge the loop open.
+            // However, we're currently _on_ the loop so the first thing we have to do is give it up.
+            let promise = thisLoop.makePromise(of: Void.self)
 
-                    // Now enqueue a "last" task.
-                    thisLoop.execute {
-                        promise.succeed(())
-                    }
+            DispatchQueue(label: "background").asyncAfter(deadline: .now() + .milliseconds(100)) {
+                let semaphore = DispatchSemaphore(value: 0)
 
-                    // Now we can unblock the semaphore.
-                    semaphore.signal()
+                thisLoop.execute {
+                    // Wedge the loop open. This will also _wake_ the loop.
+                    XCTAssertEqual(semaphore.wait(timeout: .now() + .milliseconds(500)), .success)
+                    print("Unblocking wedged task")
                 }
 
-                return promise.futureResult
-            } syscallAssertions: { assertions in
-                try assertions.assertParkedRightNow()
-                try assertions.assertWakeup()
+                // Now execute 10 tasks.
+                for _ in 0..<10 {
+                    thisLoop.execute {}
+                }
 
-                // We actually need to wait for the inner code to exit, as the optimisation we're testing here will remove a signal that the
-                // SAL is actually going to wait for in salWait().
-                try assertions.assertParkedRightNow()
+                // Now enqueue a "last" task.
+                thisLoop.execute {
+                    promise.succeed(())
+                }
+
+                // Now we can unblock the semaphore.
+                semaphore.signal()
             }
-        }
+
+            return promise.futureResult
+        }.salWait()
     }
 }

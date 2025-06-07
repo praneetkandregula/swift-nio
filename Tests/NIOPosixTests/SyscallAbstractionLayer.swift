@@ -14,39 +14,6 @@
 
 // This file contains a syscall abstraction layer (SAL) which hooks the Selector and the Socket in a way that we can
 // play the kernel whilst NIO thinks it's running on a real OS.
-//
-// The SAL tests are pretty darn awkward with respect to sendability.
-//
-// Each SAL test is setup such that it can run some work on an event loop whose
-// selector has been hooked such that it signals various events to locked
-// containers. Another closure in each test can make assertions on the values of
-// these containers, waiting for them to happen. These run in lock step. It
-// means that various very much not sendable values must be transferred between
-// isoaltion domains (the event loop and the calling thread). In general this
-// isn't safe as non-sendable values could be escaped. These tests are quite
-// careful to avoid that. This does however, mean that annotating types
-// appropriately in order for the compiler to catch thread safety warnings is
-// difficult.
-//
-// The current setup requires a 'SALContext' which holds the hooked event
-// loop and various locked containers. It's also responsible for the lifecycle
-// of these objects.
-//
-// The context also provides you with various methods for running a SAL test on
-// the hooked event loop. Within that closure you're provided with the event
-// loop and the user-to-kernel and kernel-to-user locked boxes. Another closure
-// is also provided with an assertions object to wait for various events to
-// happen.
-//
-// There are some sendability holes here:
-//
-// - LockedBox is unconditionally Sendable. It should only be Sendable when the
-//   value it stores is Sendable.
-// - Instances of LockedBox hold KernelToUser and UserToKernel types which are
-//   *not* Sendable. These are shared between the event loop and the calling
-//   thread.
-// - HookedSocket isn't Sendable but is transferred between the EventLoop and
-//   the calling thread in an UnsafeTransfer.
 
 import CNIOLinux
 import NIOConcurrencyHelpers
@@ -58,17 +25,14 @@ import XCTest
 internal enum SAL {
     fileprivate static let defaultTimeout: Double = 5
     private static let debugTests: Bool = false
-    static func printIfDebug(_ item: Any) {
+    fileprivate static func printIfDebug(_ item: Any) {
         if debugTests {
             print(item)
         }
     }
 }
 
-final class LockedBox<T>: @unchecked Sendable {
-    // @unchecked: _value is protected by a condition lock.
-    // TODO: a condition-locked-value-box could hide some of the unchecked-ness here.
-
+final class LockedBox<T> {
     struct TimeoutError: Error {
         var description: String
         init(_ description: String) {
@@ -79,7 +43,7 @@ final class LockedBox<T>: @unchecked Sendable {
 
     private let condition = ConditionLock(value: 0)
     private let description: String
-    private let didSet: @Sendable (T?) -> Void
+    private let didSet: (T?) -> Void
     private var _value: T? {
         didSet {
             self.didSet(self._value)
@@ -91,7 +55,7 @@ final class LockedBox<T>: @unchecked Sendable {
         description: String? = nil,
         file: StaticString = #filePath,
         line: UInt = #line,
-        didSet: @escaping @Sendable (T?) -> Void = { _ in }
+        didSet: @escaping (T?) -> Void = { _ in }
     ) {
         self._value = value
         self.didSet = didSet
@@ -143,12 +107,12 @@ final class LockedBox<T>: @unchecked Sendable {
         }
     }
 
-    func waitForLockedValue<R>(_ body: (T) throws -> R) throws -> R {
+    func waitForValue() throws -> T {
         if self.condition.lock(whenValue: 1, timeoutSeconds: SAL.defaultTimeout) {
             defer {
                 self.condition.unlock(withValue: 1)
             }
-            return try body(self._value!)
+            return self._value!
         } else {
             throw TimeoutError(self.description)
         }
@@ -158,12 +122,11 @@ final class LockedBox<T>: @unchecked Sendable {
 extension LockedBox where T == UserToKernel {
     func assertParkedRightNow(file: StaticString = #filePath, line: UInt = #line) throws {
         SAL.printIfDebug("\(#function)")
-        try self.waitForLockedValue { syscall in
-            if case .whenReady(.block) = syscall {
-                return
-            } else {
-                XCTFail("unexpected syscall \(syscall)", file: (file), line: line)
-            }
+        let syscall = try self.waitForValue()
+        if case .whenReady(.block) = syscall {
+            return
+        } else {
+            XCTFail("unexpected syscall \(syscall)", file: (file), line: line)
         }
     }
 }
@@ -201,18 +164,18 @@ enum KernelToUser {
 }
 
 struct UnexpectedKernelReturn: Error {
-    private var ret: String
+    private var ret: KernelToUser
 
     init(_ ret: KernelToUser) {
-        self.ret = String(describing: ret)
+        self.ret = ret
     }
 }
 
 struct UnexpectedSyscall: Error {
-    private var syscall: String
+    private var syscall: UserToKernel
 
     init(_ syscall: UserToKernel) {
-        self.syscall = String(describing: syscall)
+        self.syscall = syscall
     }
 }
 
@@ -408,7 +371,7 @@ class HookedServerSocket: ServerSocket, UserKernelInterface {
     }
 }
 
-final class HookedSocket: Socket, UserKernelInterface {
+class HookedSocket: Socket, UserKernelInterface {
     fileprivate let userToKernel: LockedBox<UserToKernel>
     fileprivate let kernelToUser: LockedBox<KernelToUser>
 
@@ -593,91 +556,152 @@ extension HookedSelector {
     }
 }
 
-extension EventLoopFuture where Value: Sendable {
+extension EventLoop {
+    internal func runSAL<T>(
+        syscallAssertions: () throws -> Void = {},
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ body: @escaping () throws -> T
+    ) throws -> T {
+        let hookedSelector = ((self as! SelectableEventLoop)._selector as! HookedSelector)
+        let box = LockedBox<Result<T, Error>>()
+
+        // To prevent races between the test driver thread (this thread) and the EventLoop (another thread), we need
+        // to wait for the EventLoop to finish its tick and park itself. That makes sure both threads are synchronised
+        // so we know exactly what the EventLoop thread is currently up to (nothing at all, waiting for a wakeup).
+        try hookedSelector.userToKernel.assertParkedRightNow()
+
+        self.execute {
+            do {
+                try box.waitForEmptyAndSet(.init(catching: body))
+            } catch {
+                box.value = .failure(error)
+            }
+        }
+        try hookedSelector.assertWakeup(file: (file), line: line)
+        try syscallAssertions()
+
+        // Here as well, we need to synchronise and wait for the EventLoop to finish running its tick.
+        try hookedSelector.userToKernel.assertParkedRightNow()
+        return try box.takeValue().get()
+    }
+}
+
+extension EventLoopFuture {
     /// This works like `EventLoopFuture.wait()` but can be used together with the SAL.
     ///
     /// Using a plain `EventLoopFuture.wait()` together with the SAL would require you to spin the `EventLoop` manually
     /// which is error prone and hard.
-    func salWait(context: SALContext) throws -> Value {
-        precondition(context.eventLoop === self.eventLoop)
+    internal func salWait() throws -> Value {
         let box = LockedBox<Result<Value, Error>>()
 
         XCTAssertNoThrow(
-            try context.runSALOnEventLoop { _, _, _ in
+            try self.eventLoop.runSAL {
                 self.whenComplete { value in
                     // We can bang this because the LockedBox is empty so it'll immediately succeed.
                     try! box.waitForEmptyAndSet(value)
                 }
             }
         )
-
-        return try box.waitForLockedValue { try $0.get() }
+        return try box.waitForValue().get()
     }
 }
 
-extension SALContext {
+protocol SALTest: AnyObject {
+    var group: MultiThreadedEventLoopGroup! { get set }
+    var wakeups: LockedBox<()>! { get set }
+    var userToKernelBox: LockedBox<UserToKernel>! { get set }
+    var kernelToUserBox: LockedBox<KernelToUser>! { get set }
+}
+
+extension SALTest {
+    private var selector: HookedSelector {
+        precondition(Array(self.group.makeIterator()).count == 1)
+        return self.loop._selector as! HookedSelector
+    }
+
+    private var loop: SelectableEventLoop {
+        precondition(Array(self.group.makeIterator()).count == 1)
+        return ((self.group!.next()) as! SelectableEventLoop)
+    }
+
+    func setUpSAL() {
+        XCTAssertNil(self.group)
+        XCTAssertNil(self.kernelToUserBox)
+        XCTAssertNil(self.userToKernelBox)
+        XCTAssertNil(self.wakeups)
+        self.kernelToUserBox = .init(description: "k2u") { newValue in
+            if let newValue = newValue {
+                SAL.printIfDebug("K --> U: \(newValue)")
+            }
+        }
+        self.userToKernelBox = .init(description: "u2k") { newValue in
+            if let newValue = newValue {
+                SAL.printIfDebug("U --> K: \(newValue)")
+            }
+        }
+        self.wakeups = .init(description: "wakeups")
+        self.group = MultiThreadedEventLoopGroup(numberOfThreads: 1, metricsDelegate: nil) {
+            try HookedSelector(
+                userToKernel: self.userToKernelBox,
+                kernelToUser: self.kernelToUserBox,
+                wakeups: self.wakeups
+            )
+        }
+    }
+
     private func makeSocketChannel(
         eventLoop: SelectableEventLoop,
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws -> SocketChannel {
-        let channel = try self.runSALOnEventLoop { eventLoop, kernelToUser, userToKernel in
+        let channel = try eventLoop.runSAL {
+            try self.assertdisableSIGPIPE(expectedFD: .max, result: .success(()))
+            try self.assertLocalAddress(address: nil)
+            try self.assertRemoteAddress(address: nil)
+        } _: {
             try SocketChannel(
                 socket: HookedSocket(
-                    userToKernel: userToKernel,
-                    kernelToUser: kernelToUser,
+                    userToKernel: self.userToKernelBox,
+                    kernelToUser: self.kernelToUserBox,
                     socket: .max
                 ),
                 eventLoop: eventLoop
             )
-        } syscallAssertions: { assertions in
-            try assertions.assertdisableSIGPIPE(expectedFD: .max, result: .success(()))
-            try assertions.assertLocalAddress(address: nil)
-            try assertions.assertRemoteAddress(address: nil)
-            try assertions.assertParkedRightNow()
         }
-
-        try self.selector.assertParkedRightNow()
+        try self.assertParkedRightNow()
         return channel
     }
 
     private func makeServerSocketChannel(
         eventLoop: SelectableEventLoop,
+        group: MultiThreadedEventLoopGroup,
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws -> ServerSocketChannel {
-        let channel = try self.runSALOnEventLoop { eventLoop, kernelToUser, userToKernel in
+        let channel = try eventLoop.runSAL {
+            try self.assertdisableSIGPIPE(expectedFD: .max, result: .success(()))
+            try self.assertLocalAddress(address: nil)
+            try self.assertRemoteAddress(address: nil)
+        } _: {
             try ServerSocketChannel(
                 serverSocket: HookedServerSocket(
-                    userToKernel: userToKernel,
-                    kernelToUser: kernelToUser,
+                    userToKernel: self.userToKernelBox,
+                    kernelToUser: self.kernelToUserBox,
                     socket: .max
                 ),
                 eventLoop: eventLoop,
-                group: eventLoop
+                group: group
             )
-        } syscallAssertions: { assertions in
-            try assertions.assertdisableSIGPIPE(expectedFD: .max, result: .success(()))
-            try assertions.assertLocalAddress(address: nil)
-            try assertions.assertRemoteAddress(address: nil)
         }
 
-        try self.selector.assertParkedRightNow()
+        try self.assertParkedRightNow()
         return channel
     }
 
     func makeSocketChannelInjectingFailures(disableSIGPIPEFailure: IOError?) throws -> SocketChannel {
-        let channel = try self.runSALOnEventLoop { eventLoop, kernelToUser, userToKernel in
-            try SocketChannel(
-                socket: HookedSocket(
-                    userToKernel: userToKernel,
-                    kernelToUser: kernelToUser,
-                    socket: .max
-                ),
-                eventLoop: eventLoop
-            )
-        } syscallAssertions: { assertions in
-            try assertions.assertdisableSIGPIPE(
+        let channel = try self.loop.runSAL {
+            try self.assertdisableSIGPIPE(
                 expectedFD: .max,
                 result: disableSIGPIPEFailure.map {
                     Result<Void, IOError>.failure($0)
@@ -687,20 +711,28 @@ extension SALContext {
                 // if F_NOSIGPIPE failed, we shouldn't see other syscalls.
                 return
             }
-            try assertions.assertLocalAddress(address: nil)
-            try assertions.assertRemoteAddress(address: nil)
+            try self.assertLocalAddress(address: nil)
+            try self.assertRemoteAddress(address: nil)
+        } _: {
+            try SocketChannel(
+                socket: HookedSocket(
+                    userToKernel: self.userToKernelBox,
+                    kernelToUser: self.kernelToUserBox,
+                    socket: .max
+                ),
+                eventLoop: self.loop
+            )
         }
-
-        try self.selector.assertParkedRightNow()
+        try self.assertParkedRightNow()
         return channel
     }
 
     func makeSocketChannel(file: StaticString = #filePath, line: UInt = #line) throws -> SocketChannel {
-        try self.makeSocketChannel(eventLoop: self.eventLoop, file: file, line: line)
+        try self.makeSocketChannel(eventLoop: self.loop, file: (file), line: line)
     }
 
     func makeServerSocketChannel(file: StaticString = #filePath, line: UInt = #line) throws -> ServerSocketChannel {
-        try self.makeServerSocketChannel(eventLoop: self.eventLoop, file: file, line: line)
+        try self.makeServerSocketChannel(eventLoop: self.loop, group: self.group, file: (file), line: line)
     }
 
     func makeConnectedSocketChannel(
@@ -709,16 +741,12 @@ extension SALContext {
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws -> SocketChannel {
-        let channel = try self.makeSocketChannel(eventLoop: self.eventLoop)
-        try self.runSALOnEventLoopAndWait { _, _, _ in
-            channel.register().flatMap {
-                channel.connect(to: remoteAddress)
-            }
-        } syscallAssertions: { assertions in
-            try assertions.assertConnect(expectedAddress: remoteAddress, result: true)
-            try assertions.assertLocalAddress(address: localAddress)
-            try assertions.assertRemoteAddress(address: remoteAddress)
-            try assertions.assertRegister { selectable, eventSet, registration in
+        let channel = try self.makeSocketChannel(eventLoop: self.loop)
+        let connectFuture = try channel.eventLoop.runSAL {
+            try self.assertConnect(expectedAddress: remoteAddress, result: true)
+            try self.assertLocalAddress(address: localAddress)
+            try self.assertRemoteAddress(address: remoteAddress)
+            try self.assertRegister { selectable, eventSet, registration in
                 if case (.socketChannel(let channel), let registrationEventSet) =
                     (registration.channel, registration.interested)
                 {
@@ -732,16 +760,21 @@ extension SALContext {
                     return false
                 }
             }
-            try assertions.assertReregister { selectable, eventSet in
+            try self.assertReregister { selectable, eventSet in
                 XCTAssertEqual([.reset, .error, .readEOF], eventSet)
                 return true
             }
             // because autoRead is on by default
-            try assertions.assertReregister { selectable, eventSet in
+            try self.assertReregister { selectable, eventSet in
                 XCTAssertEqual([.reset, .error, .readEOF, .read], eventSet)
                 return true
             }
+        } _: {
+            channel.register().flatMap {
+                channel.connect(to: remoteAddress)
+            }
         }
+        XCTAssertNoThrow(try connectFuture.salWait())
         return channel
     }
 
@@ -750,16 +783,12 @@ extension SALContext {
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws -> ServerSocketChannel {
-        let channel = try self.makeServerSocketChannel(eventLoop: self.eventLoop)
-        try self.runSALOnEventLoopAndWait { _, _, _ in
-            channel.register().flatMap {
-                channel.bind(to: localAddress)
-            }
-        } syscallAssertions: { assertions in
-            try assertions.assertBind(expectedAddress: localAddress)
-            try assertions.assertLocalAddress(address: localAddress)
-            try assertions.assertListen(expectedFD: .max, expectedBacklog: 128)
-            try assertions.assertRegister { selectable, eventSet, registration in
+        let channel = try self.makeServerSocketChannel(eventLoop: self.loop, group: self.group)
+        let bindFuture = try channel.eventLoop.runSAL {
+            try self.assertBind(expectedAddress: localAddress)
+            try self.assertLocalAddress(address: localAddress)
+            try self.assertListen(expectedFD: .max, expectedBacklog: 128)
+            try self.assertRegister { selectable, eventSet, registration in
                 if case (.serverSocketChannel(let channel), let registrationEventSet) =
                     (registration.channel, registration.interested)
                 {
@@ -773,38 +802,61 @@ extension SALContext {
                     return false
                 }
             }
-            try assertions.assertReregister { selectable, eventSet in
+            try self.assertReregister { selectable, eventSet in
                 XCTAssertEqual([.reset, .error, .readEOF], eventSet)
                 return true
             }
             // because autoRead is on by default
-            try assertions.assertReregister { selectable, eventSet in
+            try self.assertReregister { selectable, eventSet in
                 XCTAssertEqual([.reset, .error, .readEOF, .read], eventSet)
                 return true
             }
+        } _: {
+            channel.register().flatMap {
+                channel.bind(to: localAddress)
+            }
         }
+        XCTAssertNoThrow(try bindFuture.salWait())
         return channel
     }
 
-    func makeSocket() throws -> UnsafeTransfer<HookedSocket> {
-        try self.runSALOnEventLoop { _, kernelToUser, userToKernel in
-            let socket = try HookedSocket(userToKernel: userToKernel, kernelToUser: kernelToUser, socket: .max)
-            return UnsafeTransfer(socket)
-        } syscallAssertions: { assertions in
-            try assertions.assertdisableSIGPIPE(expectedFD: .max, result: .success(()))
+    func makeSocket() throws -> HookedSocket {
+        try self.loop.runSAL {
+            try self.assertdisableSIGPIPE(expectedFD: .max, result: .success(()))
+        } _: {
+            try HookedSocket(userToKernel: self.userToKernelBox, kernelToUser: self.kernelToUserBox, socket: .max)
         }
     }
 
-}
+    func tearDownSAL() {
+        SAL.printIfDebug("=== TEAR DOWN ===")
+        XCTAssertNotNil(self.kernelToUserBox)
+        XCTAssertNotNil(self.userToKernelBox)
+        XCTAssertNotNil(self.wakeups)
+        XCTAssertNotNil(self.group)
 
-struct SyscallAssertions: @unchecked Sendable {
-    // The HookedSelector _isn't_ Sendable and holds locked value boxes for types which also
-    // aren't Sendable. However, these assertions are safe; they effectively wait on a locked
-    // value and make assertions against them.
-    private let selector: HookedSelector
+        let group = DispatchGroup()
+        group.enter()
+        XCTAssertNoThrow(
+            self.group.shutdownGracefully(queue: DispatchQueue.global()) { error in
+                XCTAssertNil(error, "unexpected error: \(error!)")
+                group.leave()
+            }
+        )
+        // We're in a slightly tricky situation here. We don't know if the EventLoop thread enters `whenReady` again
+        // or not. If it has, we have to wake it up, so let's just put a return value in the 'kernel to user' box, just
+        // in case :)
+        XCTAssertNoThrow(try self.kernelToUserBox.waitForEmptyAndSet(.returnSelectorEvent(nil)))
+        group.wait()
 
-    init(selector: HookedSelector) {
-        self.selector = selector
+        self.group = nil
+        self.kernelToUserBox = nil
+        self.userToKernelBox = nil
+        self.wakeups = nil
+    }
+
+    func assertParkedRightNow(file: StaticString = #filePath, line: UInt = #line) throws {
+        try self.userToKernelBox.assertParkedRightNow(file: file, line: line)
     }
 
     func assertWaitingForNotification(
@@ -1128,16 +1180,7 @@ struct SyscallAssertions: @unchecked Sendable {
         }
     }
 
-    func assertSyscallAndReturn(
-        _ result: KernelToUser,
-        file: StaticString = #filePath,
-        line: UInt = #line,
-        matcher: (UserToKernel) throws -> Bool
-    ) throws {
-        try self.selector.assertSyscallAndReturn(result, file: file, line: line, matcher: matcher)
-    }
-
-    func assertParkedRightNow(file: StaticString = #filePath, line: UInt = #line) throws {
-        try self.selector.assertParkedRightNow(file: file, line: line)
+    func waitForNextSyscall() throws -> UserToKernel {
+        try self.userToKernelBox.waitForValue()
     }
 }

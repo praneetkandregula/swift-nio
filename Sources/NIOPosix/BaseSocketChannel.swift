@@ -251,7 +251,7 @@ class BaseSocketChannel<SocketType: BaseSocketProtocol>: SelectableChannel, Chan
     // MARK: Variables, on EventLoop thread only
     var readPending = false
     var pendingConnect: Optional<EventLoopPromise<Void>>
-    var recvBufferPool: NIOPooledRecvBufferAllocator
+    var recvBufferPool: PooledRecvBufferAllocator
     var maxMessagesPerRead: UInt = 4
     private var inFlushNow: Bool = false  // Guard against re-entrance of flushNow() method.
     private var autoRead: Bool = true
@@ -595,16 +595,8 @@ class BaseSocketChannel<SocketType: BaseSocketProtocol>: SelectableChannel, Chan
             switch writeResult.writeResult {
             case .couldNotWriteEverything:
                 newWriteRegistrationState = .register
-            case .writtenCompletely(let closeState):
+            case .writtenCompletely:
                 newWriteRegistrationState = .unregister
-                switch closeState {
-                case .open:
-                    ()
-                case .readyForClose:
-                    self.close0(error: ChannelError.outputClosed, mode: .output, promise: nil)
-                case .closed:
-                    ()  // we can be flushed before becoming active
-                }
             }
 
             if !self.isOpen || !self.hasFlushedPendingWrites() {

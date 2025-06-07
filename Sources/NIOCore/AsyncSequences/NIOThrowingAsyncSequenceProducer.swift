@@ -48,7 +48,7 @@ public struct NIOThrowingAsyncSequenceProducer<
         /// The actual sequence which should be passed to the consumer.
         public let sequence: NIOThrowingAsyncSequenceProducer
 
-        @inlinable
+        @usableFromInline
         internal init(
             source: Source,
             sequence: NIOThrowingAsyncSequenceProducer
@@ -218,7 +218,6 @@ public struct NIOThrowingAsyncSequenceProducer<
 
 @available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 extension NIOThrowingAsyncSequenceProducer: AsyncSequence {
-    @inlinable
     public func makeAsyncIterator() -> AsyncIterator {
         AsyncIterator(storage: self._internalClass._storage)
     }
@@ -235,8 +234,7 @@ extension NIOThrowingAsyncSequenceProducer {
             @usableFromInline
             internal let _storage: Storage
 
-            @inlinable
-            init(storage: Storage) {
+            fileprivate init(storage: Storage) {
                 self._storage = storage
                 self._storage.iteratorInitialized()
             }
@@ -255,8 +253,7 @@ extension NIOThrowingAsyncSequenceProducer {
         @usableFromInline
         internal let _internalClass: InternalClass
 
-        @inlinable
-        init(storage: Storage) {
+        fileprivate init(storage: Storage) {
             self._internalClass = InternalClass(storage: storage)
         }
 
@@ -312,7 +309,7 @@ extension NIOThrowingAsyncSequenceProducer {
             self._internalClass._storage
         }
 
-        @inlinable
+        @usableFromInline
         internal init(storage: Storage, finishOnDeinit: Bool) {
             self._internalClass = .init(storage: storage, finishOnDeinit: finishOnDeinit)
         }
@@ -425,7 +422,7 @@ extension NIOThrowingAsyncSequenceProducer {
         @usableFromInline
         internal let _state: NIOLockedValueBox<State>
 
-        @inlinable
+        @usableFromInline
         internal func _setDidSuspend(_ didSuspend: (@Sendable () -> Void)?) {
             self._state.withLockedValue {
                 $0.didSuspend = didSuspend
@@ -437,7 +434,7 @@ extension NIOThrowingAsyncSequenceProducer {
             self._state.withLockedValue { $0.stateMachine.isFinished }
         }
 
-        @inlinable
+        @usableFromInline
         internal init(
             backPressureStrategy: Strategy,
             delegate: Delegate
@@ -931,7 +928,7 @@ extension NIOThrowingAsyncSequenceProducer {
             /// Indicates that the yielded elements have been dropped.
             case returnDropped
 
-            @inlinable
+            @usableFromInline
             init(
                 shouldProduceMore: Bool,
                 continuationAndElement: (CheckedContinuation<Element?, Error>, Element)? = nil

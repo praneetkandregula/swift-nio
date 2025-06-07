@@ -201,9 +201,15 @@ public final class NIOAsyncTestingChannel: Channel {
 
     // These two variables are only written once, from a single thread, and never written again, so they're _technically_ thread-safe. Most methods cannot safely
     // be used from multiple threads, but `isActive`, `isOpen`, `eventLoop`, and `closeFuture` can all safely be used from any thread. Just.
+    #if compiler(>=5.10)
     @usableFromInline
     nonisolated(unsafe) var channelcore: EmbeddedChannelCore!
     nonisolated(unsafe) private var _pipeline: ChannelPipeline!
+    #else
+    @usableFromInline
+    var channelcore: EmbeddedChannelCore!
+    private var _pipeline: ChannelPipeline!
+    #endif
 
     private struct State {
         var isWritable: Bool
@@ -617,8 +623,7 @@ public final class NIOAsyncTestingChannel: Channel {
     ///   - address: The address to fake-bind to.
     ///   - promise: The `EventLoopPromise` which will be fulfilled when the fake-bind operation has been done.
     public func bind(to address: SocketAddress, promise: EventLoopPromise<Void>?) {
-        let promise = promise ?? self.testingEventLoop.makePromise()
-        promise.futureResult.whenSuccess {
+        promise?.futureResult.whenSuccess {
             self.localAddress = address
         }
         if self.eventLoop.inEventLoop {
@@ -638,8 +643,7 @@ public final class NIOAsyncTestingChannel: Channel {
     ///   - address: The address to fake-bind to.
     ///   - promise: The `EventLoopPromise` which will be fulfilled when the fake-bind operation has been done.
     public func connect(to address: SocketAddress, promise: EventLoopPromise<Void>?) {
-        let promise = promise ?? self.testingEventLoop.makePromise()
-        promise.futureResult.whenSuccess {
+        promise?.futureResult.whenSuccess {
             self.remoteAddress = address
         }
         if self.eventLoop.inEventLoop {

@@ -25,20 +25,13 @@ struct _UInt24: Sendable {
         self._backing = IntegerBitPacking.unpackUInt16UInt8(value)
     }
 
-    @inlinable
-    static var bitWidth: Int {
-        24
-    }
+    static let bitWidth: Int = 24
 
-    @inlinable
-    static var max: _UInt24 {
-        .init((UInt32(1) << 24) - 1)
-    }
+    @usableFromInline
+    static let max: _UInt24 = .init((UInt32(1) << 24) - 1)
 
-    @inlinable
-    static var min: _UInt24 {
-        .init(0)
-    }
+    @usableFromInline
+    static let min: _UInt24 = .init(0)
 }
 
 extension UInt32 {
@@ -79,23 +72,11 @@ struct _UInt56: Sendable {
         self._backing = IntegerBitPacking.unpackUInt32UInt16UInt8(value)
     }
 
-    @inlinable
-    static var bitWidth: Int {
-        56
-    }
+    static let bitWidth: Int = 56
 
-    @inlinable
-    static var _initializeUInt64: UInt64 {
-        (1 << 56) - 1
-    }
-    @inlinable
-    static var max: _UInt56 {
-        .init(_initializeUInt64)
-    }
-    @inlinable
-    static var min: _UInt56 {
-        .init(0)
-    }
+    private static let initializeUInt64: UInt64 = (1 << 56) - 1
+    static let max: _UInt56 = .init(initializeUInt64)
+    static let min: _UInt56 = .init(0)
 }
 
 extension _UInt56 {

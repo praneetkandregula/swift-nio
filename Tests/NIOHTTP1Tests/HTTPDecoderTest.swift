@@ -1013,7 +1013,7 @@ class HTTPDecoderTest: XCTestCase {
         )
 
         XCTAssertThrowsError(try channel.writeInbound(buffer)) { error in
-            XCTAssertEqual(.unknown, error as? HTTPParserError)
+            XCTAssertEqual(.unexpectedContentLength, error as? HTTPParserError)
         }
 
         self.loop.run()

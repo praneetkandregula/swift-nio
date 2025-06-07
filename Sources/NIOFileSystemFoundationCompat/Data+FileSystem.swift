@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if canImport(Darwin) || os(Linux) || os(Android)
+#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
 import _NIOFileSystem
 import NIOCore
 import NIOFoundationCompat
